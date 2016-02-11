@@ -102,3 +102,11 @@ The rows are assumed to have 'id' as the primary key.  Use the id method of Data
 let Products = Meteor.Replication('products', ds.id('partNum'), 'select * from catalog')
 let Orders = Meteor.Replication('orders', ds.id('orderNum'), 'select * from orders where state = ?', ['pending'])
 ```
+
+# Fast Count
+
+Replication defaults to patching minimongo to provide a faster method of checking for records that need to be deleted on sync.  To disable this and only use official published collection api - set the DISABLE_FAST_COUNT environment variable.
+
+```
+DISABLE_FAST_COUNT=true meteor run
+```
