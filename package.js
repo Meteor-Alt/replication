@@ -2,7 +2,7 @@ Package.describe({
   name: 'alt:replication',
   version: '1.0.0',
   summary: 'Sync data into collections from external sources like MySql or REST.',
-  git: '',
+  git: 'https://github.com/Meteor-Alt/replication.git',
   documentation: 'README.md'
 })
 
