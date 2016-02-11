@@ -11,6 +11,7 @@ meteor add alt:replication
 Set up a data source for the replication
 
 ```
+// server.js
 MySql = Npm.require('mysql')
 
 let pool = MySql.createPool({
@@ -27,26 +28,49 @@ let ds = Meteor.Replication.DataSource(pool)
 Create replications using the data source
 
 ```
+// server.js
 let Products = Meteor.Replication('products', ds, 'select * from catalog')
 ```
 
 Publish a dataset just like with any Meteor collection
 
 ```
+// server.js
 Meteor.publish('active_products', () => {
   return Products.find({status: 'active'}, {fields: {name: 1, price: 1, desc: 1}})
 })
 ```
 
+And subscribe to it on the client as usual
+
+```
+// client.js
+let Products = Mogo.Collection('products')
+Meteor.subscribe('active_products')
+```
+
 To update the data you need to update the external data and optionally server and client collections
 
 ```
+// server.js
 Meteor.methods({
   updateProductPrice(id, price){
     pool.query('update catalog set price = ? where id = ?', [price, id], (err, result) => {
+      // optionally update replication or wait for poll
       if(!err)
         Products.update({_id: id}, {$set: {price: price}})
     }
+  }
+})
+```
+
+```
+// client.js
+
+// optional client stubs to compensate for latency
+Meteor.methods({
+  updateProductPrice(id, price){
+    Products.update({_id: id}, {$set: {price: price}})
   }
 })
 ```
