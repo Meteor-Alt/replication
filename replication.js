@@ -5,6 +5,18 @@ let debug = (m) => {
     console.log('Alt:Replication: ' + m)
 }
 
+let error = (e, prefix) => {
+  let p = ''
+  if(prefix)
+    p = prefix + ': '
+  let m = e
+  if(e.message)
+    m = e.message
+  if(e.stack)
+    m = m + '\n' + e.stack
+  console.log('Alt:Replication: ' + p + m)
+}
+
 let sleep = (ms) => {
     let fiber = Fiber.current
     if(fiber){
@@ -61,45 +73,47 @@ Meteor.startup(() => {
 
         if(!s.lastUpdate || currentDateMS - s.delayMS > s.lastUpdate){
           s.lastUpdate = currentDateMS
-          let args = s.args
-          let rows = s.query(...args)
-          let updateCount = 0
-          let rIdMap = {}
+          try{
+            let args = s.args
+            let rows = s.query(...args)
+            let updateCount = 0
+            let rIdMap = {}
 
-          for(let i = 0; i < rows.length; i++){
-            if(i % 500 == 0)
-              sleep(10) // play nice with other fibers
-
-            let r = rows[i]
-            let k = r[s.primaryKey]
-            rIdMap[k] = true
-
-            if(checkUpdate(s, r)){
-              s.collection.upsert({_id: k}, {$set: r})
-              updateCount++
-            }
-          }
-          if(updateCount > 0)
-            debug(s.name + ' updated records: ' + updateCount)
-
-          if(checkDelete(s, rows)){
-            let toDelete = []
-
-            // unfortunaely this blocks but no other way
-            s.collection.find({}, {fields: {_id: 1}}).forEach((r) => {
-              if(!rIdMap[r._id])
-                toDelete.push(r._id)
-            })
-
-            for(let i = 0; i < toDelete.length; i++){
+            for(let i = 0; i < rows.length; i++){
               if(i % 500 == 0)
                 sleep(10) // play nice with other fibers
-              s.collection.remove(toDelete[i])
-            }
 
-            if(toDelete.length > 0)
-              debug(s.name + ' deleted records: ' + toDelete.length)
-          }
+              let r = rows[i]
+              let k = r[s.primaryKey]
+              rIdMap[k] = true
+
+              if(checkUpdate(s, r)){
+                s.collection.upsert({_id: k}, {$set: r})
+                updateCount++
+              }
+            }
+            if(updateCount > 0)
+              debug(s.name + ' updated records: ' + updateCount)
+
+            if(checkDelete(s, rows)){
+              let toDelete = []
+
+              // unfortunaely this blocks but no other way
+              s.collection.find({}, {fields: {_id: 1}}).forEach((r) => {
+                if(!rIdMap[r._id])
+                  toDelete.push(r._id)
+              })
+
+              for(let i = 0; i < toDelete.length; i++){
+                if(i % 500 == 0)
+                  sleep(10) // play nice with other fibers
+                s.collection.remove(toDelete[i])
+              }
+
+              if(toDelete.length > 0)
+                debug(s.name + ' deleted records: ' + toDelete.length)
+            }
+          }catch(e){ error(e, s.name) }
         }
         sleep(10)
       }
