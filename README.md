@@ -49,7 +49,8 @@ let Products = Mogo.Collection('products')
 Meteor.subscribe('active_products')
 ```
 
-To update the data you need to update the external data and optionally server and client collections
+To update the data you need to update the external data and optionally server and client collections.
+On the server use the Replication.modify method to ensure your change happens immediately.
 
 ```
 // server.js
@@ -57,9 +58,10 @@ Meteor.methods({
   updateProductPrice(id, price){
     pool.query('update catalog set price = ? where id = ?', [price, id], (err, result) => {
       // optionally update replication or wait for poll
-      if(!err)
-        Products.update({_id: id}, {$set: {price: price}})
-    }
+      if(!err){
+        Products.modify([id], () => { Products.update({_id: id}, {$set: {price: price}}) })
+      }
+    })
   }
 })
 ```
@@ -77,7 +79,7 @@ Meteor.methods({
 
 # Configuration
 
-**Meteor.Replication.DataSource(connection [, method [, delay ]] )**
+### Meteor.Replication.DataSource(connection [, method [, delay ]] )
 
 | Parameter | Description |
 | --- | --- |
@@ -88,7 +90,7 @@ Meteor.methods({
 The method of the connection object is expected to be asynchronous and require a callback as it's last parameter.
 The callback receives 2 parameters (err, data).
 
-**Meteor.Replication( name, data_source, ...args )**
+### Meteor.Replication( name, data_source, ...args )
 
 | Parameter | Description |
 | --- | --- |

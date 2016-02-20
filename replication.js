@@ -29,21 +29,36 @@ let sleep = (ms) => {
 
 
 let shadow = []
+let currentSync = null
+let currentModifications = {}
 let useFastCount = !process.env.DISABLE_FAST_COUNT
 
 Meteor.Replication = (name, ds, ...args) => {
   let collection = new Mongo.Collection(name, {connection: null})
   let haveDocs = useFastCount && !!collection._collection && !!collection._collection._docs
+  let docs = haveDocs ? collection._collection._docs : null
+
   shadow.push({
     name: name,
     primaryKey: ds.primaryKey,
     query: Meteor.wrapAsync(ds.connection[ds.method], ds.connection),
     args: args,
     collection: collection,
-    docs: haveDocs ? collection._collection._docs : null,
+    docs: docs,
     delayMS: ds.delaySeconds > 10 ? ds.delaySeconds * 1000 : 10000,
     lastUpdate: null
   })
+
+  collection.modify = (ids, callback) => {
+    if(!(ids instanceof Array))
+      ids = [ids]
+    if(currentSync && currentSync == name){
+      for(let i = 0; i < ids.length; i++)
+        currentModifications[ids[i]] = true
+    }
+    callback()
+  }
+
   return collection
 }
 
@@ -73,6 +88,7 @@ Meteor.startup(() => {
 
         if(!s.lastUpdate || currentDateMS - s.delayMS > s.lastUpdate){
           s.lastUpdate = currentDateMS
+          currentSync = s.name
           try{
             let args = s.args
             let rows = s.query(...args)
@@ -98,9 +114,9 @@ Meteor.startup(() => {
             if(checkDelete(s, rows)){
               let toDelete = []
 
-              // unfortunaely this blocks but no other way
+              // this blocks but no other way
               s.collection.find({}, {fields: {_id: 1}}).forEach((r) => {
-                if(!rIdMap[r._id])
+                if(!rIdMap[r._id] && !currentModifications[r._id])
                   toDelete.push(r._id)
               })
 
@@ -114,6 +130,8 @@ Meteor.startup(() => {
                 debug(s.name + ' deleted records: ' + toDelete.length)
             }
           }catch(e){ error(e, s.name) }
+          currentSync = null
+          currentModifications = {}
         }
         sleep(10)
       }
@@ -125,7 +143,12 @@ Meteor.startup(() => {
 
 
 let checkUpdate = (s, r) => {
-  let cr = s.collection.findOne({_id: r[s.primaryKey]})
+  let key = r[s.primaryKey]
+
+  if(currentModifications[key])
+    return false // modified out of band so don't override
+
+  let cr = s.collection.findOne({_id: key})
 
   if(!cr){
     return true // insert
@@ -160,7 +183,7 @@ if(useFastCount){
     let key = this._idStringify(id)
     if(!this._map[key])
       this._count = c + 1
-    this._map[key] = value;
+    this._map[key] = value
   }
 
   IdMap.prototype.setDefault = function(id, def){
